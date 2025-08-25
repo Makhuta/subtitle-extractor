@@ -1,0 +1,12 @@
+services:
+  sub_exptract:
+    image: sub_exptract
+    container_name: sub_exptract
+    ports:
+      - 80:80
+    environment:
+      test: "5"
+    volumes:
+      - ./testing_files:/mnt/media:ro
+      - ./logs:/var/log/supervisor
+    restart: unless-stopped

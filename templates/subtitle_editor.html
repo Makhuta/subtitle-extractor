@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subtitle Editor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/custom.css') }}" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <div class="col-12">
+                <!-- Header -->
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h1>
+                        <i class="fas fa-edit me-2"></i>
+                        Subtitle Editor
+                    </h1>
+                    <div>
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary me-2">
+                            <i class="fas fa-home me-2"></i>
+                            Home
+                        </a>
+                        <button id="download-btn" class="btn btn-success" disabled>
+                            <i class="fas fa-download me-2"></i>
+                            Download ASS File
+                        </button>
+                    </div>
+                </div>
+                
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ 'danger' if category == 'error' else 'info' }} alert-dismissible fade show" role="alert">
+                                {{ message }}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+                
+                <!-- Translation Upload -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-upload me-2"></i>
+                            Upload Translation File (Optional)
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="translation-form" enctype="multipart/form-data">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="translation-file" class="form-label">Translation File</label>
+                                        <input type="file" class="form-control" id="translation-file" 
+                                               accept=".srt,.vtt,.ass,.ssa" required>
+                                        <div class="form-text">Supported formats: SRT, VTT, ASS, SSA</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="mb-3">
+                                        <label for="tolerance" class="form-label">Time Tolerance (ms)</label>
+                                        <input type="number" class="form-control" id="tolerance" 
+                                               value="{{ tolerance }}" min="100" max="5000" step="100">
+                                        <div class="form-text">Maximum time difference for matching lines</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="mb-3">
+                                        <label class="form-label">&nbsp;</label>
+                                        <button type="submit" class="btn btn-primary d-block w-100">
+                                            <i class="fas fa-magic me-2"></i>
+                                            Match
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                        
+                        <div id="match-progress" style="display: none;">
+                            <div class="d-flex align-items-center">
+                                <div class="spinner-border spinner-border-sm me-3" role="status"></div>
+                                <span>Matching translation lines...</span>
+                            </div>
+                        </div>
+                        
+                        <div id="match-results" style="display: none;" class="mt-3">
+                            <!-- Match results will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Character Management -->
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">
+                            <i class="fas fa-users me-2"></i>
+                            Character Management
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <form id="bulk-character-form" class="row g-3">
+                            <div class="col-md-4">
+                                <label for="old-character" class="form-label">Find Character</label>
+                                <input type="text" class="form-control" id="old-character" placeholder="Current character name">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="new-character" class="form-label">Replace With</label>
+                                <input type="text" class="form-control" id="new-character" placeholder="New character name">
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">&nbsp;</label>
+                                <button type="submit" class="btn btn-warning d-block w-100">
+                                    <i class="fas fa-exchange-alt me-2"></i>
+                                    Bulk Replace
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Subtitle Lines Editor -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-list me-2"></i>
+                                Subtitle Lines
+                            </h5>
+                            <div class="btn-group">
+                                <button class="btn btn-sm btn-outline-secondary" id="filter-all">All</button>
+                                <button class="btn btn-sm btn-outline-secondary" id="filter-matched">Matched</button>
+                                <button class="btn btn-sm btn-outline-secondary" id="filter-unmatched">Unmatched</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="subtitle-lines">
+                            {% if subtitle_lines %}
+                                {% for line in subtitle_lines %}
+                                    <div class="subtitle-line mb-3 p-3 border rounded" data-index="{{ line.index }}">
+                                        <div class="row">
+                                            <div class="col-md-1">
+                                                <small class="text-muted">Line {{ line.index + 1 }}</small>
+                                                <div class="small">
+                                                    {{ "%.2f"|format(line.start / 1000) }}s - {{ "%.2f"|format(line.end / 1000) }}s
+                                                </div>
+                                            </div>
+                                            <div class="col-md-2">
+                                                <label class="form-label small">Character</label>
+                                                <input type="text" class="form-control form-control-sm character-input" 
+                                                       value="{{ line.character }}" data-field="character">
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label small">Original Text</label>
+                                                <textarea class="form-control form-control-sm text-input" 
+                                                          data-field="text" rows="2">{{ line.text }}</textarea>
+                                            </div>
+                                            <div class="col-md-4">
+                                                <label class="form-label small">Translation</label>
+                                                <textarea class="form-control form-control-sm translation-input" 
+                                                          data-field="translation" rows="2" 
+                                                          placeholder="Enter translation or upload file to auto-match">{{ line.translation or '' }}</textarea>
+                                            </div>
+                                            <div class="col-md-1">
+                                                <label class="form-label small">Status</label>
+                                                <div class="status-indicator">
+                                                    {% if line.translation %}
+                                                        <span class="badge bg-success">Matched</span>
+                                                    {% else %}
+                                                        <span class="badge bg-secondary">Unmatched</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="text-center py-5">
+                                    <i class="fas fa-exclamation-triangle fa-3x text-warning mb-3"></i>
+                                    <h5>No Subtitle Lines Available</h5>
+                                    <p class="text-muted">Please extract a subtitle first.</p>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    
+    <script>
+        let isModified = false;
+        
+        // Translation upload form
+        document.getElementById('translation-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('translation-file');
+            const toleranceInput = document.getElementById('tolerance');
+            
+            if (!fileInput.files[0]) {
+                alert('Please select a translation file');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('tolerance', toleranceInput.value);
+            
+            // Show progress
+            document.getElementById('match-progress').style.display = 'block';
+            document.getElementById('match-results').style.display = 'none';
+            
+            fetch('/api/upload_translation', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('match-progress').style.display = 'none';
+                
+                if (data.success) {
+                    // Show results
+                    document.getElementById('match-results').innerHTML = `
+                        <div class="alert alert-success">
+                            <h6>Translation Matched Successfully!</h6>
+                            <div class="small">
+                                <div>Matched Lines: ${data.matched_count}</div>
+                                <div>Total Original Lines: ${data.total_original}</div>
+                                <div>Total Translation Lines: ${data.total_translation}</div>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('match-results').style.display = 'block';
+                    
+                    // Reload the editor with matched data
+                    location.reload();
+                } else {
+                    alert('Error matching translation: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('match-progress').style.display = 'none';
+                alert('Error uploading translation: ' + error.message);
+            });
+        });
+        
+        // Bulk character replacement
+        document.getElementById('bulk-character-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const oldCharacter = document.getElementById('old-character').value.trim();
+            const newCharacter = document.getElementById('new-character').value.trim();
+            
+            if (!oldCharacter || !newCharacter) {
+                alert('Please enter both old and new character names');
+                return;
+            }
+            
+            fetch('/api/bulk_update_character', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    old_character: oldCharacter,
+                    new_character: newCharacter
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(`Updated ${data.updated_count} lines with character "${newCharacter}"`);
+                    // Update UI
+                    document.querySelectorAll('.character-input').forEach(input => {
+                        if (input.value === oldCharacter) {
+                            input.value = newCharacter;
+                        }
+                    });
+                    isModified = true;
+                    updateDownloadButton();
+                } else {
+                    alert('Error updating characters: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error updating characters: ' + error.message);
+            });
+        });
+        
+        // Line editing
+        document.querySelectorAll('.subtitle-line input, .subtitle-line textarea').forEach(input => {
+            input.addEventListener('input', function() {
+                const lineIndex = this.closest('.subtitle-line').dataset.index;
+                const field = this.dataset.field;
+                const value = this.value;
+                
+                // Update on server
+                fetch('/api/update_line', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        line_index: parseInt(lineIndex),
+                        field: field,
+                        value: value
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        isModified = true;
+                        updateDownloadButton();
+                        
+                        // Update status indicator for translation field
+                        if (field === 'translation') {
+                            const statusElement = this.closest('.subtitle-line').querySelector('.status-indicator span');
+                            if (value.trim()) {
+                                statusElement.className = 'badge bg-success';
+                                statusElement.textContent = 'Matched';
+                            } else {
+                                statusElement.className = 'badge bg-secondary';
+                                statusElement.textContent = 'Unmatched';
+                            }
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating line:', error);
+                });
+            });
+        });
+        
+        // Filter buttons
+        document.getElementById('filter-all').addEventListener('click', function() {
+            showAllLines();
+            setActiveFilter(this);
+        });
+        
+        document.getElementById('filter-matched').addEventListener('click', function() {
+            filterLines(true);
+            setActiveFilter(this);
+        });
+        
+        document.getElementById('filter-unmatched').addEventListener('click', function() {
+            filterLines(false);
+            setActiveFilter(this);
+        });
+        
+        function showAllLines() {
+            document.querySelectorAll('.subtitle-line').forEach(line => {
+                line.style.display = 'block';
+            });
+        }
+        
+        function filterLines(showMatched) {
+            document.querySelectorAll('.subtitle-line').forEach(line => {
+                const hasTranslation = line.querySelector('.translation-input').value.trim() !== '';
+                if (showMatched === hasTranslation) {
+                    line.style.display = 'block';
+                } else {
+                    line.style.display = 'none';
+                }
+            });
+        }
+        
+        function setActiveFilter(activeBtn) {
+            document.querySelectorAll('.btn-group .btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            activeBtn.classList.add('active');
+        }
+        
+        // Download button
+        document.getElementById('download-btn').addEventListener('click', function() {
+            window.location.href = '/api/download_subtitle';
+        });
+        
+        function updateDownloadButton() {
+            document.getElementById('download-btn').disabled = false;
+        }
+        
+        // Initialize
+        document.getElementById('filter-all').click();
+        
+        // Check if we have any data to enable download
+        if (document.querySelectorAll('.subtitle-line').length > 0) {
+            updateDownloadButton();
+        }
+    </script>
+</body>
+</html>

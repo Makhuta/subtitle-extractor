@@ -1,0 +1,5 @@
+flask
+ffprobe
+ffmpeg
+pysubs2
+gunicorn
