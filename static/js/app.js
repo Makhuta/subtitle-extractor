@@ -263,4 +263,23 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+document.getElementById('searchInput').addEventListener('keyup', function () {
+    let filter = this.value.toLowerCase();
+    let items = document.querySelectorAll('#itemsList .list-group-item');
+
+    items.forEach(function (item) {
+        let text = item.innerText.toLowerCase();
+        if (text.includes(filter)) {
+            item.style.display = "";
+        } else {
+            // Always keep the "Parent Directory" visible
+            if (item.querySelector('h6')?.innerText === "..") {
+                item.style.display = "";
+            } else {
+                item.style.display = "none";
+            }
+        }
+    });
+});
+
 console.log('Subtitle Extractor app loaded successfully');
