@@ -1,12 +1,13 @@
 services:
-  sub_exptract:
-    image: sub_exptract
-    container_name: sub_exptract
+  subtitle-extractor:
+    image: ghcr.io/makhuta/subtitle-extractor:latest
+    container_name: subtitle-extractor
     ports:
       - 80:80
     environment:
-      test: "5"
+      MEDIA_PATH: "/mnt/media"
+      SESSION_SECRET: "dev-secret-key-change-in-production"
     volumes:
-      - ./testing_files:/mnt/media:ro
+      - ./media:/mnt/media:ro
       - ./logs:/var/log/supervisor
     restart: unless-stopped
